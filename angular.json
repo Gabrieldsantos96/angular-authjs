@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "newProjectRoot": "projects",
+  "projects": {
+    "angular-authjs": {
+      "projectType": "library",
+      "root": "projects/angular-authjs",
+      "sourceRoot": "projects/angular-authjs/src",
+      "prefix": "lib",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:ng-packagr",
+          "configurations": {
+            "production": {
+              "tsConfig": "projects/angular-authjs/tsconfig.lib.prod.json"
+            },
+            "development": {
+              "tsConfig": "projects/angular-authjs/tsconfig.lib.json"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "test": {
+          "builder": "@angular/build:karma",
+          "options": {
+            "tsConfig": "projects/angular-authjs/tsconfig.spec.json"
+          }
+        }
+      }
+    }
+  },
+  "cli": {
+    "analytics": "2fb8cc98-a615-4069-97c5-a9ea55fc554a"
+  }
+}
