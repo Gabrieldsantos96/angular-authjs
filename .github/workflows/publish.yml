@@ -20,14 +20,17 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org/"
 
+      - name: Install Angular CLI
+        run: npm install -g @angular/cli
+
       - name: Install dependencies
         run: npm install
 
       - name: Build Angular Library
-        run: ng build angular-auth --configuration production
+        run: ng build angular-authjs --configuration production
 
       - name: Authenticate with NPM
         run: npm config set //registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
 
       - name: Publish to NPM
-        run: npm publish dist/angular-auth --access public
+        run: npm publish dist/angular-authjs --access public
