@@ -85,15 +85,9 @@ To use the **angular-authjs** library, start by creating a new Angular project w
        bootstrap: angularApp,
      })
    );
-
-   const routes = [
-     { path: "unauthorized", component: UnauthorizedComponent },
-     { path: "not-found", component: NotFoundComponent },
-     // Add your protected routes here with guards
-   ];
    ```
 
-6. Defining Protected Routes
+6. Defining Protected Routes Function
 
 The protectedRoutes function checks which routes use guards.
 Create the following components for redirection with callbackUrl:
