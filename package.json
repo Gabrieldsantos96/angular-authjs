@@ -1,6 +1,7 @@
 {
   "name": "workspace",
   "version": "0.0.0",
+  "description": "Angular + Node authentication library inspired by Auth.js for Next.js, providing SSR session management, JWT authentication, and provider-based sign-in for Angular applications.",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
