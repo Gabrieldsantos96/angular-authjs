@@ -1,59 +1,24 @@
-# Workspace
+# Angular + Node Authentication with SSR This project provides a fully functional Angular + Node (Express) authentication system inspired by Auth.js (NextAuth.js). It supports session management, JWT-based authentication, provider-based sign-in, and Angular Universal SSR. ## Features - Angular Universal (SSR) ready - Session management with JWT - Credential-based authentication provider - Express middleware ready for protected routes - Automatic redirects for unauthorized access ## Installation
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.1.4.
+bash
 
-## Development server
+# Clone the repository
 
-To start a local development server, run:
+git clone https://github.com/your-org/angular-auth-app.git
+cd angular-auth-app
 
-```bash
-ng serve
-```
+# Install dependencies
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+npm install
 
-## Code scaffolding
+Environment Variables
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+Create a .env file at the root of the project with the following variables:
 
-```bash
-ng generate component component-name
-```
+AUTH_SECRET=your_secret_key_here
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+Protected routes redirect to /unauthorized if the session is missing or expired.
 
-```bash
-ng generate --help
-```
+Authentication Setup
 
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+The application includes a default credential-based provider

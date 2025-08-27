@@ -13,19 +13,14 @@ export function sessionMiddleware(
 
   try {
     req.session = null;
-    const AUTH_COOKIE_NAME = process.env['AUTH_COOKIE_NAME'];
-
-    if (!AUTH_COOKIE_NAME) {
-      throw new NotFoundException('AUTH_COOKIE_NAME');
-    }
 
     const AUTH_SECRET = process.env['AUTH_SECRET'];
 
     if (!AUTH_SECRET) {
-      throw new NotFoundException('AUTH_COOKIE_NAME');
+      throw new NotFoundException('AUTH_SECRET');
     }
 
-    const token = req.cookies?.[AUTH_COOKIE_NAME];
+    const token = req.cookies?.['auth-csrtoken'];
 
     if (token) {
       const session = jwt.verify(token, AUTH_SECRET) as Session;
