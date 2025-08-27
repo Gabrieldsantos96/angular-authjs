@@ -9,11 +9,11 @@ import { CanActivateFn } from '@angular/router';
 import { isPlatformServer } from '@angular/common';
 import { Session } from './interfaces';
 
-interface IRequestContext {
+type IRequestContext = {
   context: {
     session: Session;
   };
-}
+};
 
 const SESSION_KEY = makeStateKey<Session>('session');
 
