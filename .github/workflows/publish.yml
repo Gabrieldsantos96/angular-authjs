@@ -24,13 +24,16 @@ jobs:
         run: npm install -g @angular/cli
 
       - name: Install dependencies
+        working-directory: ./projects/angular-authjs
         run: npm install
 
       - name: Build Angular Library
+        working-directory: ./projects/angular-authjs
         run: ng build angular-authjs --configuration production
 
       - name: Authenticate with NPM
         run: npm config set //registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
 
       - name: Publish to NPM
+        working-directory: ./projects/angular-authjs
         run: npm publish dist/angular-authjs --access public
