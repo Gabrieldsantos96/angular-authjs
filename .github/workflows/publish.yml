@@ -37,7 +37,7 @@ jobs:
         run: npm config set //registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
 
       - name: Publish to NPM
-        run: npm publish dist/angular-authjs --access public
+        run: npm publish dist/angular-authjs/ --access public
 
       - name: Display NPM debug log
         if: failure()
