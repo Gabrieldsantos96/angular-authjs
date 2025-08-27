@@ -1,6 +1,11 @@
 {
   "name": "angular-authjs",
   "version": "0.0.1",
+  "description": "Uma biblioteca de autenticação Angular",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Gabrieldsantos96/angular-authjs"
+  },
   "peerDependencies": {
     "@angular/common": "^20.2.0",
     "@angular/core": "^20.2.0",
