@@ -31,4 +31,3 @@ jobs:
 
       - name: Publish to NPM
         run: npm publish dist/angular-auth --access public
-c
