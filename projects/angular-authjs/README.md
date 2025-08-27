@@ -1,64 +1,97 @@
-# AngularAuth
+# Angular Authjs
 
 This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.2.0.
 
-## Code scaffolding
+---
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## Getting Started
 
-```bash
-ng generate component component-name
-```
+### Creating an Angular Project with SSR
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+To use the **angular-authjs** library, start by creating a new Angular project with **Server-Side Rendering (SSR)** support:
 
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the library, run:
-
-```bash
-ng build angular-authjs
-```
-
-This command will compile your project, and the build artifacts will be placed in the `dist/` directory.
-
-### Publishing the Library
-
-Once the project is built, you can publish your library by following these steps:
-
-1. Navigate to the `dist` directory:
+1. Install the Angular CLI globally (if not already installed):
 
    ```bash
-   cd dist/angular-authjs
+   npm install -g @angular/cli
    ```
 
-2. Run the `npm publish` command to publish your library to the npm registry:
-   ```bash
-   npm publish
+2. Create a new Angular project with SSR enabled:
+
+   ```ts
+   ng new my-auth-app --ssr
    ```
 
-## Running unit tests
+3. Navigate to the project directory:
+   ```ts
+   cd my-auth-app
+   ```
+4. Install package:
+   ```ts
+   npm install angular-authjs
+   ```
+5. How to use
+   ```ts
+   //server.ts
+   import { createAuthenticationRouter, protectedRoutes } from "angular-authjs";
+   import { bootstrapApplication } from "@angular/platform-browser";
+   import { AppComponent, routes } from "./app/app.component";
+   import { environment } from "./environments/environment";
+   import { provideServerRendering } from "@angular/platform-server";
+   import * as crypto from "crypto";
+   ```
 
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
+const angularApp = bootstrapApplication(AppComponent, {
+providers: [provideServerRendering()],
+});
 
-```bash
-ng test
+app.use(
+createAuthenticationRouter({
+providers: [
+{
+type: 'credentials',
+secret: crypto.randomUUID(),
+authorize: async (credentials) => {
+// external backend call or add prisma client with mongo
+return new Promise<Session>((resolve) => {
+setTimeout(() => {
+resolve({
+user: {
+id: crypto.randomUUID(),
+email: credentials.username,
+name: 'Gabriel',
+},
+expires: '',
+});
+}, 250);
+});
+},
+} as ProviderConfig,
+// Example for future providers:
+// {
+// type: 'github',
+// clientId: 'YOUR_GITHUB_CLIENT_ID',
+// clientSecret: 'YOUR_GITHUB_CLIENT_SECRET',
+// },
+// {
+// type: 'google',
+// clientId: 'YOUR_GOOGLE_CLIENT_ID',
+// clientSecret: 'YOUR_GOOGLE_CLIENT_SECRET',
+// },
+],
+secret: environment['AUTH_SECRET']!,
+protectedRoutes: protectedRoutes(routes),
+angularApp,
+bootstrap: angularApp,
+})
+);
+
+const routes = [
+{ path: 'unauthorized', component: UnauthorizedComponent },
+{ path: 'not-found', component: NotFoundComponent },
+// Add your protected routes here with guards
+];
+
 ```
 
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
 ```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
