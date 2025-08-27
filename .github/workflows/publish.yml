@@ -9,6 +9,7 @@ jobs:
   build-and-publish:
     name: Build and Publish
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
       - name: Checkout repository
@@ -33,11 +34,20 @@ jobs:
       - name: Build Angular Library
         run: ng build angular-authjs --configuration production
 
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          ssh -T git@github.com || true  # Testar conexão SSH
+
       - name: Authenticate with NPM
         run: npm config set //registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
 
       - name: Publish to NPM
-        run: npm publish dist/angular-authjs/ --access public
+        run: npm publish dist/angular-authjs --access public
 
       - name: Display NPM debug log
         if: failure()
