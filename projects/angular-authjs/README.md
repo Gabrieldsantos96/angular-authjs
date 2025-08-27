@@ -31,6 +31,7 @@ To use the **angular-authjs** library, start by creating a new Angular project w
    npm install angular-authjs
    ```
 5. How to use
+
    ```ts
    //server.ts
    import { createAuthenticationRouter, protectedRoutes } from "angular-authjs";
@@ -39,59 +40,72 @@ To use the **angular-authjs** library, start by creating a new Angular project w
    import { environment } from "./environments/environment";
    import { provideServerRendering } from "@angular/platform-server";
    import * as crypto from "crypto";
+
+   const angularApp = bootstrapApplication(AppComponent, {
+     providers: [provideServerRendering()],
+   });
+
+   app.use(
+     createAuthenticationRouter({
+       providers: [
+         {
+           type: "credentials",
+           secret: crypto.randomUUID(),
+           authorize: async (credentials) => {
+             // external backend call or add prisma client with mongo
+             return new Promise<Session>((resolve) => {
+               setTimeout(() => {
+                 resolve({
+                   user: {
+                     id: crypto.randomUUID(),
+                     email: credentials.username,
+                     name: "Gabriel",
+                   },
+                   expires: "",
+                 });
+               }, 250);
+             });
+           },
+         } as ProviderConfig,
+         // Example for future providers:
+         // {
+         // type: 'github',
+         // clientId: 'YOUR_GITHUB_CLIENT_ID',
+         // clientSecret: 'YOUR_GITHUB_CLIENT_SECRET',
+         // },
+         // {
+         // type: 'google',
+         // clientId: 'YOUR_GOOGLE_CLIENT_ID',
+         // clientSecret: 'YOUR_GOOGLE_CLIENT_SECRET',
+         // },
+       ],
+       secret: environment["AUTH_SECRET"]!,
+       protectedRoutes: protectedRoutes(routes),
+       angularApp,
+       bootstrap: angularApp,
+     })
+   );
+
+   const routes = [
+     { path: "unauthorized", component: UnauthorizedComponent },
+     { path: "not-found", component: NotFoundComponent },
+     // Add your protected routes here with guards
+   ];
    ```
 
-const angularApp = bootstrapApplication(AppComponent, {
-providers: [provideServerRendering()],
-});
+6. Defining Protected Routes
 
-app.use(
-createAuthenticationRouter({
-providers: [
-{
-type: 'credentials',
-secret: crypto.randomUUID(),
-authorize: async (credentials) => {
-// external backend call or add prisma client with mongo
-return new Promise<Session>((resolve) => {
-setTimeout(() => {
-resolve({
-user: {
-id: crypto.randomUUID(),
-email: credentials.username,
-name: 'Gabriel',
-},
-expires: '',
-});
-}, 250);
-});
-},
-} as ProviderConfig,
-// Example for future providers:
-// {
-// type: 'github',
-// clientId: 'YOUR_GITHUB_CLIENT_ID',
-// clientSecret: 'YOUR_GITHUB_CLIENT_SECRET',
-// },
-// {
-// type: 'google',
-// clientId: 'YOUR_GOOGLE_CLIENT_ID',
-// clientSecret: 'YOUR_GOOGLE_CLIENT_SECRET',
-// },
-],
-secret: environment['AUTH_SECRET']!,
-protectedRoutes: protectedRoutes(routes),
-angularApp,
-bootstrap: angularApp,
-})
-);
+The protectedRoutes function checks which routes use guards.
+Create the following components for redirection with callbackUrl:
 
+UnauthorizedComponent → unauthorized route
+
+NotFoundComponent → not-found route
+
+```ts
 const routes = [
-{ path: 'unauthorized', component: UnauthorizedComponent },
-{ path: 'not-found', component: NotFoundComponent },
-// Add your protected routes here with guards
+  { path: "unauthorized", component: UnauthorizedComponent },
+  { path: "not-found", component: NotFoundComponent },
+  // Add your protected routes here with guards
 ];
-
-```
-
 ```
