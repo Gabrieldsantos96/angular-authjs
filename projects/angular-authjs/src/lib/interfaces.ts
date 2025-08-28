@@ -5,6 +5,7 @@ export type ProviderId = 'github' | 'credentials' | 'google';
 export interface BaseProvider {
   id: ProviderId;
   clientId?: string;
+  redirectUri: string;
   clientSecret?: string;
   authorizationUrl?: string;
   tokenUrl?: string;

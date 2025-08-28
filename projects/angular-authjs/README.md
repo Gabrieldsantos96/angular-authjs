@@ -87,7 +87,7 @@ To use the **angular-authjs** library, start by creating a new Angular project w
    );
    ```
 
-6. Defining Protected Routes Function
+6. Defining Protected Routes
 
 The protectedRoutes function checks which routes use guards.
 Create the following components for redirection with callbackUrl:
