@@ -43,7 +43,7 @@ async function handleOAuthCallback(
     const token = await fetch(endpoints.tokenUrl, {
       method: 'POST',
       body: JSON.stringify({
-        code: '',
+        code: code,
         client_id: provider.clientId,
         client_secret: provider.clientSecret,
         redirect_uri: provider.redirectUri,
