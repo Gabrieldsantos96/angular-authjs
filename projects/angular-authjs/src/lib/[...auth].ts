@@ -245,9 +245,10 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
     });
   };
 
-  router.get(/^(?!\/api\/).*/, async (request: Request, res: Response, next: NextFunction) => {
+  router.get('*', async (request: Request, res: Response, next: NextFunction) => {
     const req = request as unknown as Request & { session: Session };
     try {
+
       const path = req.originalUrl.replace(/^\//, '');
 
       const isPublic = config.publicRoutes?.includes(path) || isDynamicRouteMatch(path, config.publicRoutes);
@@ -262,15 +263,6 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
         return res.redirect(`/unauthorized?callbackUrl=${callbackUrl}`);
       }
 
-      next();
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.get('*', async (request: Request, res: Response, next: NextFunction) => {
-    const req = request as unknown as Request & { session: Session };
-    try {
       if (config.angularApp && config.bootstrap) {
         const response = await config.angularApp.handle(req, {
           bootstrap: config.bootstrap,
