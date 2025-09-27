@@ -1,4 +1,3 @@
-// auth-router.ts
 import express, { Request, Response, NextFunction } from 'express';
 import * as jwt from 'jsonwebtoken';
 import cookieParser from 'cookie-parser';
@@ -9,9 +8,8 @@ import {
   SignInCommand,
 } from './interfaces';
 import { ErrorResponse } from './interfaces';
-import { InvalidArgumentException, NotFoundException } from './extensions';
-import { sessionMiddleware } from './session-middleware';
 import { writeResponseToNodeResponse } from '@angular/ssr/node';
+import { sessionMiddleware } from './session-middleware';
 
 function createJwt(session: Session, secret: string) {
   return jwt.sign(session, secret, { expiresIn: '3h' });
@@ -96,15 +94,20 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
       const { username, password, callbackUrl = '/', code } = req.body;
       const providerConfig = config.providers.find((p) => p.id === provider);
 
-      if (!providerConfig) throw new NotFoundException('PROVIDER CONFIG');
+      if (!providerConfig) {
+        return res.status(404).json({ error: 'Provider not found' });
+      }
 
       if (providerConfig.type === 'credentials') {
-
-        if (!username || !password) throw new InvalidArgumentException();
+        if (!username || !password) {
+          return res.status(400).json({ error: 'Missing username or password' });
+        }
 
         try {
           const data = await providerConfig.authorize({ username, password });
-          if (!data || !data.user) return res.status(401).end();
+          if (!data || !data.user) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+          }
 
           const maxTime = config?.maxTime || 3 * 60 * 60 * 1000;
 
@@ -124,14 +127,11 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
 
           return res.json({ redirectTo: callbackUrl });
         } catch (err) {
-          return res.status(500).json(err).end();
+          return res.status(500).json({ error: 'Internal server error' });
         }
       }
 
-      if (
-        providerConfig.type === 'github' ||
-        providerConfig.type === 'google'
-      ) {
+      if (providerConfig.type === 'github' || providerConfig.type === 'google') {
         if (!code) {
           const endpoints = OAUTH_ENDPOINTS[providerConfig.type];
           const authUrl = `${endpoints.authorizeUrl}?client_id=${providerConfig.clientId}&redirect_uri=${providerConfig.redirectUri}&response_type=code&scope=openid%20email%20profile`;
@@ -140,7 +140,9 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
 
         const session = await handleOAuthCallback(providerConfig, code);
 
-        if (!session) return res.status(401).end();
+        if (!session) {
+          return res.status(401).json({ error: 'Authentication failed' });
+        }
 
         const maxTime = config?.maxTime || 3 * 60 * 60 * 1000;
         session.expires = new Date(Date.now() + maxTime).toISOString();
@@ -157,7 +159,7 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
         return res.json({ redirectTo: callbackUrl });
       }
 
-      return null;
+      return res.status(400).json({ error: 'Invalid provider type' });
     }
   );
 
@@ -166,11 +168,17 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
     const code = req.query.code as string;
     const providerConfig = config.providers.find((p) => p.id === provider);
 
-    if (!providerConfig) throw new NotFoundException('PROVIDER CONFIG');
-    if (!code) return res.status(400).json({ error: 'Missing code' });
+    if (!providerConfig) {
+      return res.status(404).json({ error: 'Provider not found' });
+    }
+    if (!code) {
+      return res.status(400).json({ error: 'Missing code' });
+    }
 
     const session = await handleOAuthCallback(providerConfig, code);
-    if (!session) return res.status(401).end();
+    if (!session) {
+      return res.status(401).json({ error: 'Authentication failed' });
+    }
 
     const maxTime = config?.maxTime || 3 * 60 * 60 * 1000;
     session.expires = new Date(Date.now() + maxTime).toISOString();
@@ -190,13 +198,15 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
   router.post('/api/auth/sign-out', (req, res) => {
     const { callbackUrl = '/' } = req.body;
     res.clearCookie('auth-csrtoken');
-    return res.json(callbackUrl).end();
+    return res.json({ redirectTo: callbackUrl });
   });
 
   router.get('/api/auth/session', (request, res) => {
     const req = request as unknown as Request & { session: Session };
     try {
-      if (!req.session) return res.status(401).end();
+      if (!req.session) {
+        return res.status(401).json({ error: 'No active session' });
+      }
 
       const session = req.session as Session;
       const expiresAt = new Date(session.expires).getTime();
@@ -221,17 +231,47 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
       }
 
       res.clearCookie('auth-csrtoken');
-      return res.status(401).end();
+      return res.status(401).json({ error: 'Session expired' });
     } catch {
       res.clearCookie('auth-csrtoken');
-      return res.status(401).end();
+      return res.status(401).json({ error: 'Invalid session' });
     }
   });
 
-  router.use(async (request: Request, res: Response, next: NextFunction) => {
+  const isDynamicRouteMatch = (path: string, routes: string[] = []): boolean => {
+    return routes.some((route) => {
+      const regex = new RegExp(`^${route.replace(/:[^/]+/g, '[^/]+')}$`);
+      return regex.test(path);
+    });
+  };
+
+  router.get(/^(?!\/api\/).*/, async (request: Request, res: Response, next: NextFunction) => {
     const req = request as unknown as Request & { session: Session };
     try {
-      if (!!config.angularApp && !!config.bootstrap) {
+      const path = req.originalUrl.replace(/^\//, '');
+
+      const isPublic = config.publicRoutes?.includes(path) || isDynamicRouteMatch(path, config.publicRoutes);
+      const isProtected = config.protectedRoutes?.includes(path) || isDynamicRouteMatch(path, config.protectedRoutes);
+
+      if (!isPublic && !isProtected) {
+        return res.redirect('/not-found');
+      }
+
+      if (isProtected && !req?.session) {
+        const callbackUrl = encodeURIComponent(req.originalUrl);
+        return res.redirect(`/unauthorized?callbackUrl=${callbackUrl}`);
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get('*', async (request: Request, res: Response, next: NextFunction) => {
+    const req = request as unknown as Request & { session: Session };
+    try {
+      if (config.angularApp && config.bootstrap) {
         const response = await config.angularApp.handle(req, {
           bootstrap: config.bootstrap,
           context: { session: req.session },
@@ -241,19 +281,7 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
         }
       }
 
-      const path = req.originalUrl.replace(/^\//, '');
-
-      if (!config.publicRoutes?.includes(path) && !config.protectedRoutes?.includes(path)) {
-        return res.redirect('/not-found');
-      }
-
-      if (config.protectedRoutes?.includes(path) && !req?.session) {
-        const callbackUrl = encodeURIComponent(req.originalUrl);
-        return res.redirect(`/unauthorized?callbackUrl=${callbackUrl}`);
-      }
-
-      next();
-
+      res.status(404).send();
     } catch (err) {
       next(err);
     }

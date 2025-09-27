@@ -1,6 +1,6 @@
 {
   "name": "angular-authjs",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "Uma biblioteca de autenticação Angular",
   "peerDependencies": {
     "@angular/common": "^20.2.0",
