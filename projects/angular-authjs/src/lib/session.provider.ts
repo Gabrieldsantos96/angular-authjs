@@ -1,14 +1,18 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, throwError } from 'rxjs';
-import { catchError, tap } from 'rxjs/operators';
+import { Observable, BehaviorSubject, map } from 'rxjs';
 import { ProviderId, Session } from './interfaces';
 
 @Injectable({ providedIn: 'root' })
-export class SessionProvider {
-  private session = signal<Session | null>(null);
 
-  constructor(private http: HttpClient) {}
+export class SessionProvider {
+  private sessionSubject = new BehaviorSubject<Session | null>(null);
+  readonly session$ = this.sessionSubject.asObservable();
+  readonly sessionValue = this.sessionSubject.value;
+  readonly isAuthenticated = !!this.sessionValue?.user
+  readonly isAuthenticated$ = this.session$.pipe(map(session => !!session?.user));
+
+  constructor(private http: HttpClient) { }
 
   getSession(): Observable<Session> {
     return this.http.get<Session>('/api/auth/session');
@@ -30,13 +34,7 @@ export class SessionProvider {
   }
 
   signOut(callbackUrl: string = '/'): Observable<string> {
-    return this.http.post<string>('/api/auth/sign-out', { callbackUrl }).pipe(
-      tap(() => this.session.set(null)),
-      catchError((error) => throwError(() => error))
-    );
+    return this.http.post<string>('/api/auth/sign-out', { callbackUrl });
   }
 
-  isAuthenticated(): boolean {
-    return !!this.session();
-  }
 }

@@ -99,6 +99,7 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
       if (!providerConfig) throw new NotFoundException('PROVIDER CONFIG');
 
       if (providerConfig.type === 'credentials') {
+        
         if (!username || !password) throw new InvalidArgumentException();
 
         try {
