@@ -31,6 +31,7 @@ export interface AuthRouterConfig {
   providers: ProviderConfig[];
   secret: string;
   protectedRoutes?: string[];
+  publicRoutes?: string[];
   angularApp?: AngularNodeAppEngine;
   bootstrap?: unknown;
   maxTime?: number;

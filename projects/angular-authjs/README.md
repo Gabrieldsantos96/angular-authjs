@@ -34,21 +34,34 @@ To use the **angular-authjs** library, start by creating a new Angular project w
    ```
 5. How to use
 
-Integrate the angular-authjs library into your Angular application with SSR. Below is an example of how to set it up in your server.ts file, including the implementation of GitHub and Google OAuth providers:
+Integrate the angular-authjs library into your Angular application with SSR. Below is an example of how to set it up in your server.ts file, including the implementation of GitHub and Google OAuth providers, this is how your server ts should be looked, delete the default writeResponseToNodeResponse function from your server.ts, as createAuthenticationRouter will handle the response for you. 
 
 ```ts
 //server.ts
 // server.ts
-import { createAuthenticationRouter, protectedRoutes } from "angular-authjs";
-import { bootstrapApplication } from "@angular/platform-browser";
-import { AppComponent, routes } from "./app/app.component";
-import { environment } from "./environments/environment";
-import { provideServerRendering } from "@angular/platform-server";
-import * as crypto from "crypto";
+import {
+  AngularNodeAppEngine,
+  createNodeRequestHandler,
+  isMainModule,
+} from '@angular/ssr/node';
+import { createAuthenticationRouter, getProtectedRoutes, getPublicRoutes, ProviderConfig, Session } from "angular-authjs";
+import express from 'express';
+import { join } from 'node:path';
+import { routes } from './app/app.routes';
+import { environment } from './environments/environment';
 
-const angularApp = bootstrapApplication(AppComponent, {
-  providers: [provideServerRendering()],
-});
+const browserDistFolder = join(import.meta.dirname, '../browser');
+
+const app = express();
+const angularApp = new AngularNodeAppEngine();
+
+app.use(
+  express.static(browserDistFolder, {
+    maxAge: '1y',
+    index: false,
+    redirect: false,
+  }),
+);
 
 app.use(
   createAuthenticationRouter({
@@ -58,7 +71,6 @@ app.use(
         id: "credentials",
         secret: crypto.randomUUID(),
         authorize: async (credentials) => {
-          // External backend call or add Prisma client with MongoDB
           return new Promise<Session>((resolve) => {
             setTimeout(() => {
               resolve({
@@ -78,27 +90,41 @@ app.use(
         id: "github",
         clientId: environment["GITHUB_CLIENT_ID"]!,
         clientSecret: environment["GITHUB_CLIENT_SECRET"]!,
-        redirectUri: "http://localhost:4200/api/auth/callback/github", // Adjust this URL
+        redirectUri: "http://localhost:4200/api/auth/callback/github",
       } as ProviderConfig,
       {
         type: "google",
         id: "google",
         clientId: environment["GOOGLE_CLIENT_ID"]!,
         clientSecret: environment["GOOGLE_CLIENT_SECRET"]!,
-        redirectUri: "http://localhost:4200/api/auth/callback/google", // Adjust this URL
+        redirectUri: "http://localhost:4200/api/auth/callback/google",
       } as ProviderConfig,
     ],
     secret: environment["AUTH_SECRET"]!,
-    protectedRoutes: protectedRoutes(routes),
+    protectedRoutes: getProtectedRoutes(routes),
+    publicRoutes: getPublicRoutes(routes),
     angularApp,
     bootstrap: angularApp,
   })
 );
+
+if (isMainModule(import.meta.url)) {
+  const port = process.env['PORT'] || 4000;
+  app.listen(port, (error) => {
+    if (error) {
+      throw error;
+    }
+
+    console.log(`Node Express server listening on http://localhost:${port}`);
+  });
+}
+export const reqHandler = createNodeRequestHandler(app);
+
 ```
 
 6. Defining Protected Routes
 
-The protectedRoutes function checks which routes use guards.
+The getProtectedRoutes function checks which routes use guards.
 Create the following components for redirection with callbackUrl:
 
 UnauthorizedComponent → unauthorized route
@@ -106,11 +132,110 @@ UnauthorizedComponent → unauthorized route
 NotFoundComponent → not-found route
 
 ```ts
-const routes = [
-  { path: "unauthorized", component: UnauthorizedComponent },
-  { path: "not-found", component: NotFoundComponent },
-  // Add your protected routes here with guards
+
+import { Routes } from '@angular/router';
+import { RouteGuard } from 'angular-authjs';
+import { UnauthorizedComponent } from './components/unauthorized.component';
+import { NotFoundComponent } from './components/not-found.component';
+import { DashboardComponent } from './components/dashboard.component';
+
+import { LoginComponent } from './components/login.component';
+
+export const routes: Routes = [
+    { path: 'unauthorized', component: UnauthorizedComponent },
+    { path: 'dashboard', component: DashboardComponent, canActivate: [RouteGuard] },
+    { path: 'login', component: LoginComponent },
+    { path: '**', component: NotFoundComponent },
 ];
+
+```
+
+Login Example
+
+```ts
+
+import { Component, OnInit, inject } from '@angular/core';
+import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+import { SessionProvider } from 'angular-authjs';
+import { Router } from '@angular/router';
+import { CommonModule } from '@angular/common';
+import { signal } from '@angular/core';
+import { filter } from 'rxjs';
+
+@Component({
+  selector: 'app-login',
+  standalone: true,
+  imports: [CommonModule, ReactiveFormsModule],
+  template: `
+    <h2>Login</h2>
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()">
+      <label for="username">Usuário</label>
+      <input id="username" formControlName="username" required />
+      <div *ngIf="loginForm.get('username')?.invalid && loginForm.get('username')?.touched" style="color:red">Usuário é obrigatório</div>
+      <label for="password">Senha</label>
+      <input id="password" type="password" formControlName="password" required />
+      <div *ngIf="loginForm.get('password')?.invalid && loginForm.get('password')?.touched" style="color:red">Senha é obrigatória</div>
+      <button type="submit" [disabled]="loginForm.invalid">Entrar</button>
+    </form>
+    <button (click)="signInWithProvider('github')">Entrar com GitHub</button>
+    <button (click)="signInWithProvider('google')">Entrar com Google</button>
+    <div *ngIf="error()" style="color:red">{{ error() }}</div>
+  `,
+})
+export class LoginComponent implements OnInit {
+  loginForm: FormGroup;
+  error = signal('');
+
+  private sessionProvider = inject(SessionProvider);
+  private router = inject(Router);
+  private fb = inject(FormBuilder);
+
+  constructor() {
+    this.loginForm = this.fb.group({
+      username: ['', Validators.required],
+      password: ['', Validators.required],
+    });
+  }
+
+  ngOnInit(): void {
+    this.sessionProvider.isAuthenticated$
+      .pipe(filter(isAuth => isAuth))
+      .subscribe(() => {
+        this.router.navigateByUrl('/dashboard');
+      });
+  }
+
+  onSubmit() {
+    if (this.loginForm.invalid) return;
+    const { username, password } = this.loginForm.value;
+    this.sessionProvider.signIn('credentials', {
+      username,
+      password,
+      callbackUrl: '/dashboard',
+    }).subscribe({
+      next: (res) => {
+        this.router.navigateByUrl(res.redirectTo);
+      },
+      error: () => {
+        this.error.set('Usuário ou senha inválidos');
+      }
+    });
+  }
+
+  signInWithProvider(provider: 'github' | 'google') {
+    this.sessionProvider.signIn(provider, {
+      callbackUrl: '/dashboard',
+    }).subscribe({
+      next: (res) => {
+        window.location.href = res.redirectTo;
+      },
+      error: () => {
+        this.error.set(`Erro ao autenticar com ${provider}`);
+      }
+    });
+  }
+}
+
 ```
 
 7. Using the SessionProvider Service

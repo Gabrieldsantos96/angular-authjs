@@ -99,7 +99,7 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
       if (!providerConfig) throw new NotFoundException('PROVIDER CONFIG');
 
       if (providerConfig.type === 'credentials') {
-        
+
         if (!username || !password) throw new InvalidArgumentException();
 
         try {
@@ -243,12 +243,17 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
 
       const path = req.originalUrl.replace(/^\//, '');
 
-      if (config.protectedRoutes?.includes(path)) {
+      if (!config.publicRoutes?.includes(path) && !config.protectedRoutes?.includes(path)) {
+        return res.redirect('/not-found');
+      }
+
+      if (config.protectedRoutes?.includes(path) && !req?.session) {
         const callbackUrl = encodeURIComponent(req.originalUrl);
         return res.redirect(`/unauthorized?callbackUrl=${callbackUrl}`);
       }
 
-      return res.redirect('/not-found');
+      return next();
+      
     } catch (err) {
       next(err);
     }
