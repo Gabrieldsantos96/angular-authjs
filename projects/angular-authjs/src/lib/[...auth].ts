@@ -238,21 +238,14 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
     }
   });
 
-  const isDynamicRouteMatch = (path: string, routes: string[] = []): boolean => {
-    return routes.some((route) => {
-      const regex = new RegExp(`^${route.replace(/:[^/]+/g, '[^/]+')}$`);
-      return regex.test(path);
-    });
-  };
-
   router.get('*', async (request: Request, res: Response, next: NextFunction) => {
     const req = request as unknown as Request & { session: Session };
     try {
 
       const path = req.originalUrl.replace(/^\//, '');
 
-      const isPublic = config.publicRoutes?.includes(path) || isDynamicRouteMatch(path, config.publicRoutes);
-      const isProtected = config.protectedRoutes?.includes(path) || isDynamicRouteMatch(path, config.protectedRoutes);
+      const isPublic = config.publicRoutes?.includes(path);
+      const isProtected = config.protectedRoutes?.includes(path);
 
       if (!isPublic && !isProtected) {
         return res.redirect('/not-found');
