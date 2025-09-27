@@ -252,8 +252,8 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
         return res.redirect(`/unauthorized?callbackUrl=${callbackUrl}`);
       }
 
-      return next();
-      
+      next();
+
     } catch (err) {
       next(err);
     }
