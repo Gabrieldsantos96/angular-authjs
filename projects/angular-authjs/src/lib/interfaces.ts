@@ -1,61 +1,86 @@
+import { Routes } from '@angular/router';
 import { AngularNodeAppEngine } from '@angular/ssr/node';
+import { OAuthProviderClass } from './providers/abstract-class';
 
-export type ProviderId = 'github' | 'credentials' | 'google';
-
-export interface BaseProvider {
-  id: ProviderId;
-  clientId?: string;
-  redirectUri: string;
-  clientSecret?: string;
-  authorizationUrl?: string;
-  tokenUrl?: string;
-  userInfoUrl?: string;
+export const enum ProviderId {
+  credentials = "credentials",
+  github = "github",
+  google = "google",
+  outlook = "outlook",
+  supabase = "supabase"
 }
 
-export interface OAuthProvider extends BaseProvider {
-  type: 'github' | 'google';
-}
 
-export interface CredentialsProvider extends BaseProvider {
-  type: 'credentials';
-  secret: string;
-  authorize: (credentials: {
-    username: string;
-    password: string;
-  }) => Promise<Session>;
-}
-
-export type ProviderConfig = OAuthProvider | CredentialsProvider;
-
-export interface AuthRouterConfig {
-  providers: ProviderConfig[];
-  secret: string;
-  protectedRoutes?: string[];
-  publicRoutes?: string[];
-  angularApp?: AngularNodeAppEngine;
-  bootstrap?: unknown;
-  maxTime?: number;
-}
-
-export interface SignInCommand {
-  provider: ProviderId;
-  username?: string;
-  password?: string;
-  callbackUrl?: string;
-  code?: string;
+export interface User {
+  name: string;
+  email: string | null;
+  image?: string;
 }
 
 export interface Session {
-  user: {
-    id?: string;
-    name?: string;
-    email?: string;
-    image?: string;
-  };
+  user: User;
   expires: string;
-  accessToken?: string;
+  access_token?: string;
+  id_token?: string;
+  refresh_token?: string;
+  issuedAt?: string;
 }
 
 export interface ErrorResponse {
   error: string;
+}
+
+export interface ProviderBaseEnvironment {
+  type: ProviderId;
+  redirectUri: string;
+  clientId: string;
+  clientSecret: string;
+}
+
+export interface OAuthProviderConfig extends ProviderBaseEnvironment {
+  type: ProviderId.github | ProviderId.google;
+}
+
+export interface SupabaseProviderConfig extends ProviderBaseEnvironment {
+  type: ProviderId.supabase;
+  supabaseUrl: string;
+}
+
+export interface OutlookProviderConfig extends ProviderBaseEnvironment {
+  type: ProviderId.outlook;
+  tenant: string;
+}
+
+export interface CredentialsProviderConfig extends ProviderBaseEnvironment {
+  type: ProviderId.credentials;
+  backendUrl: string;
+  clientId: string;
+  clientSecret: string;
+}
+
+export type ProviderConfig =
+  | OAuthProviderConfig
+  | SupabaseProviderConfig
+  | OutlookProviderConfig
+  | CredentialsProviderConfig;
+
+
+export interface AuthRouterConfig {
+  providers: OAuthProviderClass[];
+  routes: Routes;
+  secret: string;
+  unauthorizeRoutePath?: string;
+  angularApp: AngularNodeAppEngine;
+}
+
+
+export type SignInCommand = {
+  username: string;
+  password: string;
+  callbackUrl?: string;
+  provider: ProviderId.credentials
+} | {
+  code: string;
+  provider: Exclude<ProviderId, ProviderId.credentials>;
+  callbackUrl?: string;
 }

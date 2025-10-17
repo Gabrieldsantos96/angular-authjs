@@ -1,84 +1,19 @@
 import express, { Request, Response, NextFunction } from 'express';
-import * as jwt from 'jsonwebtoken';
 import cookieParser from 'cookie-parser';
-import {
-  AuthRouterConfig,
-  ProviderConfig,
-  Session,
-  SignInCommand,
-} from './interfaces';
-import { ErrorResponse } from './interfaces';
 import { writeResponseToNodeResponse } from '@angular/ssr/node';
-import { sessionMiddleware } from './session-middleware';
+import { session } from './middlewares';
+import { getProtectedRoutes } from './route-helpers';
+import { AuthRouterConfig, ErrorResponse, ProviderId, Session, SignInCommand } from './interfaces';
+import { createJwt } from './jwt-helper';
+import { getJwks } from './jwks';
 
-function createJwt(session: Session, secret: string) {
-  return jwt.sign(session, secret, { expiresIn: '3h' });
-}
 
-const OAUTH_ENDPOINTS: Record<
-  string,
-  { authorizeUrl: string; tokenUrl: string; userInfoUrl: string }
-> = {
-  github: {
-    authorizeUrl: 'https://github.com/login/oauth/authorize',
-    tokenUrl: 'https://github.com/login/oauth/access_token',
-    userInfoUrl: 'https://api.github.com/user',
-  },
-  google: {
-    authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    tokenUrl: 'https://oauth2.googleapis.com/token',
-    userInfoUrl: 'https://openidconnect.googleapis.com/v1/userinfo',
-  },
-};
-
-async function handleOAuthCallback(
-  provider: ProviderConfig,
-  code: string
-): Promise<Session | null> {
-  try {
-    const endpoints = OAUTH_ENDPOINTS[provider.type];
-
-    const token = await fetch(endpoints.tokenUrl, {
-      method: 'POST',
-      body: JSON.stringify({
-        code: code,
-        client_id: provider.clientId,
-        client_secret: provider.clientSecret,
-        redirect_uri: provider.redirectUri,
-        grant_type: 'authorization_code',
-      }),
-    }).then((s) => s.json());
-
-    const accessToken = token?.data?.access_token || token?.data?.accessToken;
-
-    if (!accessToken) return null;
-
-    const user = await fetch(endpoints.userInfoUrl, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }).then((s) => s.json());
-
-    const profile = user.data;
-
-    return {
-      user: {
-        id: profile.id ?? profile.sub,
-        email: profile.email,
-        name: profile.name || profile.login,
-      },
-      expires: '',
-    };
-  } catch (err) {
-    console.error('OAuth callback error:', err);
-    return null;
-  }
-}
 
 export function createAuthenticationRouter(config: AuthRouterConfig) {
   const router = express.Router();
   router.use(express.json());
   router.use(cookieParser());
-  router.use(sessionMiddleware);
+  router.use(session(config.secret));
 
   router.post(
     '/api/auth/sign-in/:provider',
@@ -86,113 +21,81 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
       req: Request<
         { provider: string },
         Session | ErrorResponse,
-        SignInCommand & { code?: string }
+        SignInCommand
       >,
       res: Response
     ) => {
-      const provider = req.params.provider;
-      const { username, password, callbackUrl = '/', code } = req.body;
-      const providerConfig = config.providers.find((p) => p.id === provider);
+      const providerId = req.params.provider;
+      const provider = config.providers.find((p) => p.config.type === providerId);
 
-      if (!providerConfig) {
-        return res.status(404).json({ error: 'Provider not found' });
+      if (!provider) {
+        return res.status(404).json({ error: 'Provider not found.' });
       }
 
-      if (providerConfig.type === 'credentials') {
-        if (!username || !password) {
-          return res.status(400).json({ error: 'Missing username or password' });
-        }
-
-        try {
-          const data = await providerConfig.authorize({ username, password });
-          if (!data || !data.user) {
-            return res.status(401).json({ error: 'Invalid credentials' });
-          }
-
-          const maxTime = config?.maxTime || 3 * 60 * 60 * 1000;
-
-          const session: Session = {
-            user: data.user,
-            expires: new Date(Date.now() + maxTime).toISOString(),
-          };
-
-          const token = createJwt(session, config.secret);
-
-          res.cookie('auth-csrtoken', token, {
-            httpOnly: true,
-            maxAge: config.maxTime,
-            sameSite: 'strict',
-            secure: process.env['NODE_ENV'] === 'production',
-          });
-
-          return res.json({ redirectTo: callbackUrl });
-        } catch (err) {
-          return res.status(500).json({ error: 'Internal server error' });
-        }
-      }
-
-      if (providerConfig.type === 'github' || providerConfig.type === 'google') {
-        if (!code) {
-          const endpoints = OAUTH_ENDPOINTS[providerConfig.type];
-          const authUrl = `${endpoints.authorizeUrl}?client_id=${providerConfig.clientId}&redirect_uri=${providerConfig.redirectUri}&response_type=code&scope=openid%20email%20profile`;
-          return res.json({ redirectTo: authUrl });
-        }
-
-        const session = await handleOAuthCallback(providerConfig, code);
-
-        if (!session) {
-          return res.status(401).json({ error: 'Authentication failed' });
-        }
-
-        const maxTime = config?.maxTime || 3 * 60 * 60 * 1000;
-        session.expires = new Date(Date.now() + maxTime).toISOString();
-
-        const token = createJwt(session, config.secret);
-
-        res.cookie('auth-csrtoken', token, {
-          httpOnly: true,
-          maxAge: config.maxTime,
-          sameSite: 'strict',
-          secure: process.env['NODE_ENV'] === 'production',
-        });
-
-        return res.json({ redirectTo: callbackUrl });
-      }
-
-      return res.status(400).json({ error: 'Invalid provider type' });
+      const authUrl = provider.authorize(req.body.provider === ProviderId.credentials ? req.body : req.body.callbackUrl || '/');
+      return res.json({ redirectUri: authUrl });
     }
   );
 
-  router.get('/api/auth/callback/:provider', async (req: any, res) => {
-    const provider = req.params.provider;
-    const code = req.query.code as string;
-    const providerConfig = config.providers.find((p) => p.id === provider);
+  router.get('/api/auth/callback/:provider', async (req: Request, res) => {
+    const providerId = req.params['provider'];
+    const code = req.query['code'] as string;
+    const state = req.query['state'] as string;
 
-    if (!providerConfig) {
-      return res.status(404).json({ error: 'Provider not found' });
+    const provider = config.providers.find((p) => p.config.type === providerId);
+
+    if (!provider) {
+      return res.status(404).json({ error: 'Provider not found.' });
     }
     if (!code) {
-      return res.status(400).json({ error: 'Missing code' });
+      return res.status(400).json({ error: 'Missing Code' });
     }
 
-    const session = await handleOAuthCallback(providerConfig, code);
-    if (!session) {
-      return res.status(401).json({ error: 'Authentication failed' });
+    const result = await provider.callback<Session>(code);
+
+    if (!result) {
+      return res.status(401).json({ error: 'OAuth: Authentication failed' });
     }
 
-    const maxTime = config?.maxTime || 3 * 60 * 60 * 1000;
-    session.expires = new Date(Date.now() + maxTime).toISOString();
+    const session: Session = {
+      user: {
+        name: result.user.name,
+        email: result.user.email,
+        image: result.user.image,
+      },
+      access_token: result.access_token,
+      id_token: result.id_token,
+      expires: result.expires,
+      issuedAt: new Date().toISOString(),
+    };
 
-    const token = createJwt(session, config.secret);
+    const token = createJwt(session);
 
     res.cookie('auth-csrtoken', token, {
       httpOnly: true,
-      maxAge: config.maxTime,
+      maxAge: Number(session.expires) * 1000,
       sameSite: 'strict',
       secure: process.env['NODE_ENV'] === 'production',
+      path: '/',
     });
 
-    return res.redirect('/');
+    let redirectUrl = '';
+    if (state) {
+      try {
+        const decodedState = JSON.parse(Buffer.from(state, 'base64').toString());
+
+        if (typeof decodedState !== 'object' || !decodedState) {
+          console.error('Invalid decodedState: not an object');
+          return res.redirect(`http://localhost:4200?error=${encodeURIComponent('Invalid state')}`);
+        }
+        redirectUrl = `http://localhost:4200?redirectTo=${encodeURIComponent(decodedState.callbackUrl)}`;
+      } catch (err) {
+        console.error('Failed to decode state:', err);
+        return res.redirect(`http://localhost:4200?error=${encodeURIComponent('Failed to decode state')}`);
+      }
+    }
+
+    return res.redirect(redirectUrl);
   });
 
   router.post('/api/auth/sign-out', (req, res) => {
@@ -205,71 +108,72 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
     const req = request as unknown as Request & { session: Session };
     try {
       if (!req.session) {
-        return res.status(401).json({ error: 'No active session' });
+        res.clearCookie('auth-csrtoken');
+        return res.status(401).json({ error: 'OAuth: No active session.' });
       }
 
       const session = req.session as Session;
-      const expiresAt = new Date(session.expires).getTime();
-
-      const maxTime = config?.maxTime || 3 * 60 * 60 * 1000;
-
-      if (Date.now() < expiresAt) {
-        const newSession: Session = {
-          ...session,
-          expires: new Date(Date.now() + maxTime).toISOString(),
-        };
-        const token = createJwt(newSession, config.secret);
-
-        res.cookie('auth-csrtoken', token, {
-          httpOnly: true,
-          maxAge: config.maxTime,
-          sameSite: 'strict',
-          secure: process.env['NODE_ENV'] === 'production',
-        });
-
-        return res.status(200).json(newSession);
-      }
-
+      return res.status(200).json(session);
+    } catch (error) {
+      console.error('Session validation error:', error);
       res.clearCookie('auth-csrtoken');
-      return res.status(401).json({ error: 'Session expired' });
-    } catch {
-      res.clearCookie('auth-csrtoken');
-      return res.status(401).json({ error: 'Invalid session' });
+      return res.status(401).json({ error: 'OAuth: Invalid Session.' });
     }
   });
 
-  router.get('*', async (request: Request, res: Response, next: NextFunction) => {
-    const req = request as unknown as Request & { session: Session };
-    try {
+ router.get('/api/auth/.well-known/jwks.json', async (_, res) => {
+  try {
+    const jwks = getJwks();
+    res.json(jwks);
+  } catch (err) {
+    console.error('Error exporting JWKS:', err);
+    res.status(500).json({ error: 'Failed to export JWKS' });
+  }
+});
 
-      const path = req.originalUrl.replace(/^\//, '');
+  // router.use('/web-api/*', createProxyMiddleware({
+  //   target: process.env.EXTERNAL_BACKEND_URL,
+  //   changeOrigin: true,
+  //   pathRewrite: { '^/external-api': '' },
+  //   on: {
+  //     proxyReq: (proxyReq, req: Request & { session?: Session }, res, options) => {
+  //       if (!!req.cookies?.['e-auth-csrtoken']) {
+  //         proxyReq.setHeader('Authorization', req.cookies?.['e-auth-csrtoken']);
+  //       }
+  //     },
+  //     error: (err, req, res: Response) => {
+  //       res.status(500).json({ error: 'Proxy error' });
+  //     },
+  //   },
+  // }));
 
-      const isPublic = config.publicRoutes?.includes(path);
-      const isProtected = config.protectedRoutes?.includes(path);
 
-      if (!isPublic && !isProtected) {
-        return res.redirect('/not-found');
-      }
+  router.use((req: Request, res: Response, next: NextFunction) => {
+    const request = req;
 
-      if (isProtected && !req?.session) {
-        const callbackUrl = encodeURIComponent(req.originalUrl);
-        return res.redirect(`/unauthorized?callbackUrl=${callbackUrl}`);
-      }
-
-      if (config.angularApp && config.bootstrap) {
-        const response = await config.angularApp.handle(req, {
-          bootstrap: config.bootstrap,
-          context: { session: req.session },
-        });
-        if (response) {
-          return writeResponseToNodeResponse(response, res);
-        }
-      }
-
-      res.status(404).send();
-    } catch (err) {
-      next(err);
+    if (/^\/api(\/)?$/.test(request.originalUrl)) {
+      return next();
     }
+
+    const path = request.originalUrl.replace(/^\//, '');
+    const protectedRoutes = getProtectedRoutes(config.routes);
+    const isProtected = protectedRoutes.some((s) => s === path);
+
+    if (isProtected && !request.session) {
+      const path = config?.unauthorizeRoutePath || 'unauthorized';
+      const callbackUrl = encodeURIComponent(request.originalUrl);
+      return res.redirect(`/${path}?callbackUrl=${callbackUrl}`);
+    }
+
+    return config.angularApp
+      .handle(request, {
+        bootstrap: config.angularApp,
+        context: { session: request.session },
+      })
+      .then((response) =>
+        response ? writeResponseToNodeResponse(response, res) : next()
+      )
+      .catch(next);
   });
 
   return router;
