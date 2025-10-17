@@ -131,25 +131,9 @@ export function createAuthenticationRouter(config: AuthRouterConfig) {
   }
 });
 
-  // router.use('/web-api/*', createProxyMiddleware({
-  //   target: process.env.EXTERNAL_BACKEND_URL,
-  //   changeOrigin: true,
-  //   pathRewrite: { '^/external-api': '' },
-  //   on: {
-  //     proxyReq: (proxyReq, req: Request & { session?: Session }, res, options) => {
-  //       if (!!req.cookies?.['e-auth-csrtoken']) {
-  //         proxyReq.setHeader('Authorization', req.cookies?.['e-auth-csrtoken']);
-  //       }
-  //     },
-  //     error: (err, req, res: Response) => {
-  //       res.status(500).json({ error: 'Proxy error' });
-  //     },
-  //   },
-  // }));
-
 
   router.use((req: Request, res: Response, next: NextFunction) => {
-    const request = req;
+    const request = req as unknown as Request & { session: Session };
 
     if (/^\/api(\/)?$/.test(request.originalUrl)) {
       return next();

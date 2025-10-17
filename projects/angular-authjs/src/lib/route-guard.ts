@@ -1,4 +1,3 @@
-// src/lib/route.guard.ts
 import {
   PLATFORM_ID,
   makeStateKey,
