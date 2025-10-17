@@ -1,0 +1,5 @@
+export { OAuthProviderClass } from "./abstract-class"
+export { CredentialsAuthProvider } from "./credentials"
+export { GitHubOAuthProvider } from "./github"
+export { GoogleOAuthProvider } from "./google"
+export { OutlookOAuthProvider } from "./microsoft"
